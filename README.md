@@ -36,3 +36,6 @@ Note: This section is for stages 2 and beyond.
    `src/main/java/Main.java`.
 1. Commit your changes and run `git push origin master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
+
+
+Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing documentation: https://datatracker.ietf.org/doc/html/rfc7230#page-5
