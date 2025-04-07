@@ -3,60 +3,90 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public class Main {
 
-  /*
-  Source: https://datatracker.ietf.org/doc/html/rfc7230#section-3
-  HTTP-message   = start-line
-                      *( header-field CRLF )
-                      CRLF
-                      [ message-body ]
-   */
-  private static final String GOOD_RESPONSE = "HTTP/1.1 200 OK\r\n\r\n";
-  private static final String BAD_RESPONSE = "HTTP/1.1 404 Not Found\r\n\r\n";
+  private final static String HTTP_TYPE = "HTTP/1.1";
+  private static final String GOOD_RESPONSE = "200 OK";
+  private static final String BAD_RESPONSE = "404 Not Found";
+
+  private static final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo"));
+
 
   public static void main(String[] args) {
 
-    System.out.println("Logs from your program will appear here!");
+     System.out.println("Program starting...");
 
      try {
        ServerSocket serverSocket = new ServerSocket(4221);
 
-       // Since the tester restarts your program quite often, setting SO_REUSEADDR
-       // ensures that we don't run into 'Address already in use' errors
+       // Since the tester restarts the program quite often, setting SO_REUSEADDR
+       // ensures that the tests don't run into 'Address already in use' errors
        serverSocket.setReuseAddress(true);
 
        Socket client = serverSocket.accept(); // Wait for connection from client.
-       System.out.println("accepted new connection");
+       System.out.println("Accepted new connection");
 
-       // todo get inputStream bytes, convert to string, then parse request:
-       // GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n
+       // reader for the input data
        BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
        String requestLine = reader.readLine();
+       System.out.println("requestline: " + requestLine);
+       String[] splitUrl = getUrlParts(requestLine);
+       System.out.println("split url length: " + splitUrl.length);
+       for (String s : splitUrl) System.out.println("index: " + s);
 
-       if (!isGoodUrlPath(requestLine)) {
+       // if it's a bad request
+         // also closes streams
+       if (!isGoodUrlPath(splitUrl)) {
            System.out.println("inside bad response path");
-           client.getOutputStream().write(BAD_RESPONSE.getBytes());
-           client.getOutputStream().flush();
-           client.close(); // also closes streams
+           client.getOutputStream().write(buildEmptyBody(BAD_RESPONSE).getBytes());
        } else {
-           System.out.println("inside good response path");
-           client.getOutputStream().write(GOOD_RESPONSE.getBytes());
-           client.getOutputStream().flush();
-           client.close(); // also closes streams
+           // echo endpoint
+           if (splitUrl.length == 0) {
+               client.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
+           } else if (Objects.equals(splitUrl[1], endpoints.get(1))) {
+               System.out.println("echo endpoint");
+               String echoResponse = buildGoodResponseWithBody(splitUrl[2]);
+               System.out.println("echo response: " + echoResponse);
+               client.getOutputStream().write(echoResponse.getBytes());
+           } else {
+               client.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
+           }
        }
+       client.getOutputStream().flush();
+       client.close(); // also closes streams
      } catch (IOException e) {
        System.out.println("IOException: " + e.getMessage());
      }
   }
 
-  private static boolean isGoodUrlPath(String requestLine) {
-      String[] parts = requestLine.split(" ");
+  private static boolean isGoodUrlPath(String[] splitUrl) {
+      if (splitUrl.length == 0) return true;
+      return splitUrl.length < 2 || endpoints.contains(splitUrl[1]);
+  }
+
+  /*
+  Split the request line (something like GET /echo/abc HTTP/1.1\r\n) to get the url as an array of strings.
+  This program assumes all requests are GET and HTTP/1.1
+  */
+  private static String[] getUrlParts(String s) {
+      String[] parts = s.split(" ");
       String url = parts[1];
-      String[] splitUrl = url.split("/");
-      if (splitUrl.length >= 2 && !Objects.equals(splitUrl[1], "index.html")) return false;
-      return true;
+      return url.split("/");
+  }
+
+  private static String buildGoodResponseWithBody(String body) {
+      return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: text/plain\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
+  }
+
+  /*
+  Generate a response without headers or a body.
+  */
+  private static String buildEmptyBody(String response) {
+      return HTTP_TYPE + " " + response + "\r\n\r\n";
   }
 }
