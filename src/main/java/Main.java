@@ -1,6 +1,9 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Objects;
 
 public class Main {
 
@@ -30,27 +33,20 @@ public class Main {
 
        // todo get inputStream bytes, convert to string, then parse request:
        // GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n
-       String message = client.getInputStream().readAllBytes().toString();
-       String[] parts = message.split("\r\n");
-       String requestLine = "";
-       String headers = "";
-       String body = "";
-       String urlPath = "";
-       if (parts.length == 0) {
-           client.getOutputStream().write(BAD_RESPONSE.getBytes());
-       } else {
-           requestLine = parts[0];
-       }
-       if (parts.length > 1) {
-           headers = parts[1];
-       }
-       if (parts.length > 2) {
-           body = parts[2];
-       }
+       BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
+       String requestLine = reader.readLine();
+
        if (!isGoodUrlPath(requestLine)) {
+           System.out.println("inside bad response path");
            client.getOutputStream().write(BAD_RESPONSE.getBytes());
+           client.getOutputStream().flush();
+           client.close(); // also closes streams
+       } else {
+           System.out.println("inside good response path");
+           client.getOutputStream().write(GOOD_RESPONSE.getBytes());
+           client.getOutputStream().flush();
+           client.close(); // also closes streams
        }
-       client.getOutputStream().write(GOOD_RESPONSE.getBytes());
      } catch (IOException e) {
        System.out.println("IOException: " + e.getMessage());
      }
@@ -60,6 +56,7 @@ public class Main {
       String[] parts = requestLine.split(" ");
       String url = parts[1];
       String[] splitUrl = url.split("/");
-      return splitUrl.length <= 2;
+      if (splitUrl.length >= 2 && !Objects.equals(splitUrl[1], "index.html")) return false;
+      return true;
   }
 }
