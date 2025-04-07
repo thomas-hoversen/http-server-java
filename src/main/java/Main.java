@@ -3,10 +3,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class Main {
 
@@ -14,7 +11,7 @@ public class Main {
   private static final String GOOD_RESPONSE = "200 OK";
   private static final String BAD_RESPONSE = "404 Not Found";
 
-  private static final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo"));
+  private static final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo", "user-agent"));
 
 
   public static void main(String[] args) {
@@ -33,28 +30,51 @@ public class Main {
 
        // reader for the input data
        BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-       String requestLine = reader.readLine();
+
+       // request line
+       String requestLine = "";
+
+       // headers
+       Map<String, String> headers = new HashMap<>();
+
+       // body (not needed yet
+       String body = "";
+
+       // first line is the request line
+       requestLine = reader.readLine();
        System.out.println("requestline: " + requestLine);
+
+       // then extract headers
+       getHeaders(reader, headers);
+
        String[] splitUrl = getUrlParts(requestLine);
-       System.out.println("split url length: " + splitUrl.length);
-       for (String s : splitUrl) System.out.println("index: " + s);
 
        // if it's a bad request
-         // also closes streams
+       // also closes streams
        if (!isGoodUrlPath(splitUrl)) {
            System.out.println("inside bad response path");
            client.getOutputStream().write(buildEmptyBody(BAD_RESPONSE).getBytes());
        } else {
-           // echo endpoint
            if (splitUrl.length == 0) {
                client.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
-           } else if (Objects.equals(splitUrl[1], endpoints.get(1))) {
-               System.out.println("echo endpoint");
-               String echoResponse = buildGoodResponseWithBody(splitUrl[2]);
-               System.out.println("echo response: " + echoResponse);
-               client.getOutputStream().write(echoResponse.getBytes());
            } else {
-               client.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
+               switch (splitUrl[1]) {
+                   case "echo":
+                       System.out.println("echo endpoint");
+                       String echoResponse = buildGoodResponseWithBody(splitUrl[2]);
+                       System.out.println("echo response: " + echoResponse);
+                       client.getOutputStream().write(echoResponse.getBytes());
+                       break;
+                   case "user-agent":
+                       System.out.println("user-agent endpoint");
+                       String userAgentResponse = buildGoodResponseWithBody(headers.get("user-agent"));
+                       System.out.println("userAgentResponse: " + userAgentResponse);
+                       client.getOutputStream().write(userAgentResponse.getBytes());
+                       break;
+                   default:
+                       client.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
+                       break;
+               }
            }
        }
        client.getOutputStream().flush();
@@ -79,7 +99,22 @@ public class Main {
       return url.split("/");
   }
 
+  private static void getHeaders(BufferedReader reader, Map<String, String> headerMap) throws IOException {
+      String line;
+      while (!(line = reader.readLine()).isEmpty()) {
+          if (line.contains(":")) {
+              // add header to map
+              line = line.toLowerCase();
+              String[] splitLine = line.split(":");
+              headerMap.put(splitLine[0], splitLine[1].strip());
+          }
+      }
+      System.out.println("headers: " + headerMap.toString());
+  }
+
+
   private static String buildGoodResponseWithBody(String body) {
+      System.out.println("buildGoodResponseWithBody(String body): " + body);
       return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: text/plain\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
   }
 
