@@ -2,23 +2,32 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 public class Server implements Runnable {
 
     private final String HTTP_TYPE = "HTTP/1.1";
 
+    private final String PLAINTEXT_CONTENT_TYPE = "text/plain";
+
+    private final String OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
+
     private final String GOOD_RESPONSE = "200 OK";
 
     private final String BAD_RESPONSE = "404 Not Found";
 
-    private final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo", "user-agent"));
+    private final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo", "user-agent", "files"));
 
     private final Socket socket;
 
+    private final String filesDir;
+
     // constructor
-    public Server(Socket socket) {
+    public Server(Socket socket, String filesDir) {
         this.socket = socket;
+        this.filesDir = filesDir;
     }
 
     @Override
@@ -31,9 +40,6 @@ public class Server implements Runnable {
 
             // headers
             Map<String, String> headers = new HashMap<>();
-
-            // body (not needed yet
-            String body = "";
 
             // first line is the request line
             Optional<String> requestLine = Optional.ofNullable(reader.readLine());
@@ -58,18 +64,28 @@ public class Server implements Runnable {
                 if (splitUrl.length == 0) {
                     socket.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
                 } else {
-                    switch (splitUrl[1]) {
+                    String endpoint = splitUrl[1];
+                    String argument;
+                    switch (endpoint) {
                         case "echo":
                             System.out.println("echo endpoint");
-                            String echoResponse = buildGoodResponseWithBody(splitUrl[2]);
+                            argument = splitUrl[2];
+                            String echoResponse = buildGoodResponseWithBody(argument, PLAINTEXT_CONTENT_TYPE);
                             System.out.println("echo response: " + echoResponse);
                             socket.getOutputStream().write(echoResponse.getBytes());
                             break;
                         case "user-agent":
                             System.out.println("user-agent endpoint");
-                            String userAgentResponse = buildGoodResponseWithBody(headers.get("user-agent"));
+                            String userAgentResponse = buildGoodResponseWithBody(headers.get("user-agent"), PLAINTEXT_CONTENT_TYPE);
                             System.out.println("userAgentResponse: " + userAgentResponse);
                             socket.getOutputStream().write(userAgentResponse.getBytes());
+                            break;
+                        case "files":
+                            System.out.println("files endpoint");
+                            argument = splitUrl[2];
+                            Path path = Path.of(filesDir + "/" + argument); // directory/filename
+                            String response = buildFilesResponse(path);
+                            socket.getOutputStream().write(response.getBytes());
                             break;
                         default:
                             socket.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
@@ -84,9 +100,37 @@ public class Server implements Runnable {
         }
     }
 
+    private String buildFilesResponse(Path path) {
+        try {
+            // read the content as a string
+            String content = Files.readString(path);
+            // build and return the response
+            return buildGoodResponseWithBody(content, OCTET_STREAM_CONTENT_TYPE);
+        } catch (Exception e) {
+            System.out.println("Error trying to read from path: " + path);
+            return buildEmptyBody(BAD_RESPONSE);
+        }
+    }
+
     private boolean isGoodUrlPath(String[] splitUrl) {
-        if (splitUrl.length == 0) return true;
-        return splitUrl.length < 2 || endpoints.contains(splitUrl[1]);
+        // sample url: []
+        // sample url: [,apple] // random
+        // sample url: [,echo, apple] // echo random
+        // sample url: [,files, hello.txt] // files endpoint and filename
+        System.out.println(splitUrl.length);
+        for (String s : splitUrl) System.out.print(s + " ");
+        // todo validates files endpoint has filename
+        if (splitUrl.length < 2) return true;
+        if (endpoints.contains(splitUrl[1])) {
+            // ensure files endpoint comes with a filename
+            if ("files".equals(splitUrl[1]) || "echo".equals(splitUrl[1])) {
+                boolean valid = splitUrl.length == 3; // sample url: [,files, hello.txt] // files endpoint and filename
+                if (!valid) System.out.println("Request is missing a required argument (filename or content to echo)");
+                return valid;
+            }
+            return true;
+
+        } else return false;
     }
 
     /*
@@ -114,9 +158,9 @@ public class Server implements Runnable {
     }
 
 
-    private String buildGoodResponseWithBody(String body) {
+    private String buildGoodResponseWithBody(String body, String contentType) {
         System.out.println("buildGoodResponseWithBody(String body): " + body);
-        return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: text/plain\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
+        return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
     }
 
     /*
