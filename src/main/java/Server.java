@@ -6,13 +6,13 @@ import java.util.*;
 
 public class Server implements Runnable {
 
-    private final static String HTTP_TYPE = "HTTP/1.1";
+    private final String HTTP_TYPE = "HTTP/1.1";
 
-    private static final String GOOD_RESPONSE = "200 OK";
+    private final String GOOD_RESPONSE = "200 OK";
 
-    private static final String BAD_RESPONSE = "404 Not Found";
+    private final String BAD_RESPONSE = "404 Not Found";
 
-    private static final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo", "user-agent"));
+    private final List<String> endpoints = new ArrayList<>(Arrays.asList("index.html", "echo", "user-agent"));
 
     private final Socket socket;
 
@@ -26,10 +26,8 @@ public class Server implements Runnable {
         // reader for the input data
         BufferedReader reader = null;
         try {
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-            // request line
-            String requestLine = "";
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
             // headers
             Map<String, String> headers = new HashMap<>();
@@ -38,13 +36,18 @@ public class Server implements Runnable {
             String body = "";
 
             // first line is the request line
-            requestLine = reader.readLine();
+            Optional<String> requestLine = Optional.ofNullable(reader.readLine());
             System.out.println("requestline: " + requestLine);
+
+            if (requestLine.isEmpty()) {
+                System.out.println("Empty request line detected");
+                return;
+            }
 
             // then extract headers
             getHeaders(reader, headers);
 
-            String[] splitUrl = getUrlParts(requestLine);
+            String[] splitUrl = getUrlParts(requestLine.get());
 
             // if it's a bad request
             // also closes streams
@@ -81,7 +84,7 @@ public class Server implements Runnable {
         }
     }
 
-    private static boolean isGoodUrlPath(String[] splitUrl) {
+    private boolean isGoodUrlPath(String[] splitUrl) {
         if (splitUrl.length == 0) return true;
         return splitUrl.length < 2 || endpoints.contains(splitUrl[1]);
     }
@@ -90,13 +93,14 @@ public class Server implements Runnable {
     Split the request line (something like GET /echo/abc HTTP/1.1\r\n) to get the url as an array of strings.
     This program assumes all requests are GET and HTTP/1.1
     */
-    private static String[] getUrlParts(String s) {
+    private String[] getUrlParts(String s) {
         String[] parts = s.split(" ");
         String url = parts[1];
         return url.split("/");
     }
 
-    private static void getHeaders(BufferedReader reader, Map<String, String> headerMap) throws IOException {
+    private void getHeaders(BufferedReader reader, Map<String, String> headerMap) throws IOException {
+        //todo wrap line with optional?
         String line;
         while (!(line = reader.readLine()).isEmpty()) {
             if (line.contains(":")) {
@@ -110,7 +114,7 @@ public class Server implements Runnable {
     }
 
 
-    private static String buildGoodResponseWithBody(String body) {
+    private String buildGoodResponseWithBody(String body) {
         System.out.println("buildGoodResponseWithBody(String body): " + body);
         return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: text/plain\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
     }
@@ -118,7 +122,7 @@ public class Server implements Runnable {
     /*
     Generate a response without headers or a body.
     */
-    private static String buildEmptyBody(String response) {
+    private String buildEmptyBody(String response) {
         return HTTP_TYPE + " " + response + "\r\n\r\n";
     }
 }
