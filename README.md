@@ -39,3 +39,4 @@ Note: This section is for stages 2 and beyond.
 
 To run tests: codecrafters test
 Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing documentation: https://datatracker.ietf.org/doc/html/rfc7230#page-5
+Java concurrency and thread pools info: https://medium.com/@ShantKhayalian/advanced-java-concurrency-patterns-and-best-practices-6cc071b5d96c
