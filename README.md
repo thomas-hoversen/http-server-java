@@ -1,44 +1,79 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/9ddfddb6-eb9a-48cc-9957-ecb37893ebfa)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# Java HTTP Server
 
-This is a starting point for Java solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+A minimal multithreaded HTTP/1.1 server written entirely from scratch in Java.  
+Implemented as part of a **Codecrafters** challenge, meaning every feature was built by hand with only milestone hints for structure.
 
-[HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) is the
-protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
-that is capable of serving multiple clients.
+The server supports:
 
-Along the way you'll learn about TCP servers,
-[HTTP request syntax](https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html),
-and more.
+* `GET /` – root (200 OK, empty body)
+* `GET /echo/<msg>` – echoes `<msg>`
+* `GET /user-agent` – echoes the request’s **User‑Agent** header
+* `GET /files/<name>` – returns a file from the supplied directory
+* `POST /files/<name>` – saves the request body to `<name>` and replies **201 Created**
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+---
 
-# Passing the first stage
+## Running locally
 
-The entry point for your HTTP server implementation is in
-`src/main/java/Main.java`. Study and uncomment the relevant code, and push your
-changes to pass the first stage:
+### Prerequisites
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+* **JDK 11+**
+* **Maven** (`mvn -v` should work)
+* **bash / sh**
+
+### Start the server
+
+```bash
+chmod +x your_program.sh          # one‑time
+./your_program.sh --directory /tmp/data/codecrafters.io/http-server-tester/
 ```
 
-Time to move on to the next stage!
+### Sample curl commands
+```bash
+# Upload a file (POST)
+curl -v -X POST http://localhost:4221/files/raspberry_raspberry_banana_raspberry \
+     -H "Content-Length: 52" \
+     -H "Content-Type: application/octet-stream" \
+     -d 'banana blueberry grape banana grape mango pear apple'
 
-# Stage 2 & beyond
+# Download the same file (GET)
+curl -v http://localhost:4221/files/raspberry_raspberry_banana_raspberry
 
-Note: This section is for stages 2 and beyond.
+# Missing file → 404
+curl -v http://localhost:4221/files/non-existentapple_blueberry_raspberry_grape
 
-1. Ensure you have `mvn` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main/java/Main.java`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+# Concurrent‑connections stage (four parallel GET / requests)
+curl -v http://localhost:4221/          # client‑2, first pair
+curl -v http://localhost:4221/          # client‑1, first pair
+curl -v http://localhost:4221/          # client‑1, second pair
+curl -v http://localhost:4221/          # client‑2, second pair
 
-To run tests: codecrafters test
-Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing documentation: https://datatracker.ietf.org/doc/html/rfc7230#page-5
-Java concurrency and thread pools info: https://medium.com/@ShantKhayalian/advanced-java-concurrency-patterns-and-best-practices-6cc071b5d96c
-Java Optional: https://www.baeldung.com/java-optional
-Java working with Files: https://www.marcobehler.com/guides/java-files
+# Echo endpoints
+curl -v http://localhost:4221/user-agent \
+     -H "User-Agent: orange/raspberry-apple"
+
+curl -v http://localhost:4221/echo/pear
+
+# Unknown path → 200 with empty body
+curl -v http://localhost:4221/raspberry
+
+# Root path (blank body, 200)
+curl -v http://localhost:4221/
+```
+
+## Resources consulted to implement the code
+## Resources consulted
+
+* **RFC 7230 – HTTP/1.1 Message Syntax and Routing**  
+  <https://datatracker.ietf.org/doc/html/rfc7230#page-5>
+
+* **Java concurrency & thread pools**  
+  <https://medium.com/@ShantKhayalian/advanced-java-concurrency-patterns-and-best-practices-6cc071b5d96c>
+
+* **`java.util.Optional` guide**  
+  <https://www.baeldung.com/java-optional>
+
+* **Working with `java.nio.file.Files`**  
+  <https://www.marcobehler.com/guides/java-files>
+
+* **Codecrafters CLI** – run automated tests locally with `codecrafters test` (this won't work outside Thomas's local machine).
