@@ -2,8 +2,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class Server implements Runnable {
@@ -15,6 +20,8 @@ public class Server implements Runnable {
     private final String OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
 
     private final String GOOD_RESPONSE = "200 OK";
+
+    private final String CREATED_RESPONSE = "201 Created";
 
     private final String BAD_RESPONSE = "404 Not Found";
 
@@ -38,9 +45,6 @@ public class Server implements Runnable {
 
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-            // headers
-            Map<String, String> headers = new HashMap<>();
-
             // first line is the request line
             Optional<String> requestLine = Optional.ofNullable(reader.readLine());
             System.out.println("requestline: " + requestLine);
@@ -50,41 +54,52 @@ public class Server implements Runnable {
                 return;
             }
 
-            // then extract headers
+            // headers
+            Map<String, String> headers = new HashMap<>();
             getHeaders(reader, headers);
 
             String[] splitUrl = getUrlParts(requestLine.get());
 
-            // if it's a bad request
-            // also closes streams
+            // GET or POST
+            String methodType = getHttpMethodType(requestLine.get());
+
             if (!isGoodUrlPath(splitUrl)) {
-                System.out.println("inside bad response path");
+                System.out.println("invalid url: " + Arrays.toString(splitUrl));
                 socket.getOutputStream().write(buildEmptyBody(BAD_RESPONSE).getBytes());
             } else {
                 if (splitUrl.length == 0) {
                     socket.getOutputStream().write(buildEmptyBody(GOOD_RESPONSE).getBytes());
                 } else {
                     String endpoint = splitUrl[1];
-                    String argument;
                     switch (endpoint) {
                         case "echo":
                             System.out.println("echo endpoint");
-                            argument = splitUrl[2];
-                            String echoResponse = buildGoodResponseWithBody(argument, PLAINTEXT_CONTENT_TYPE);
+                            String echoText = splitUrl[2];
+                            String echoResponse = buildGoodResponseWithBody(echoText, PLAINTEXT_CONTENT_TYPE, GOOD_RESPONSE);
                             System.out.println("echo response: " + echoResponse);
                             socket.getOutputStream().write(echoResponse.getBytes());
                             break;
                         case "user-agent":
                             System.out.println("user-agent endpoint");
-                            String userAgentResponse = buildGoodResponseWithBody(headers.get("user-agent"), PLAINTEXT_CONTENT_TYPE);
+                            String userAgentResponse = buildGoodResponseWithBody(headers.get("user-agent"), PLAINTEXT_CONTENT_TYPE, GOOD_RESPONSE);
                             System.out.println("userAgentResponse: " + userAgentResponse);
                             socket.getOutputStream().write(userAgentResponse.getBytes());
                             break;
                         case "files":
                             System.out.println("files endpoint");
-                            argument = splitUrl[2];
-                            Path path = Path.of(filesDir + "/" + argument); // directory/filename
-                            String response = buildFilesResponse(path);
+                            System.out.println("methodType: " + methodType);
+                            String response;
+                            String filename = splitUrl[2]; // filename
+                            String directory = filesDir + filename;
+                            if (methodType.equals("GET")) {
+                                Path path = Path.of(directory); // directory/filename
+                                response = buildGETFilesResponse(path);
+                            } else {
+                                // POST
+                                String body = getBody(reader, headers);
+                                Boolean isSaved = saveFile(directory, body);
+                                response = isSaved ? buildEmptyBody(CREATED_RESPONSE) : buildEmptyBody(BAD_RESPONSE);
+                            }
                             socket.getOutputStream().write(response.getBytes());
                             break;
                         default:
@@ -93,22 +108,38 @@ public class Server implements Runnable {
                     }
                 }
             }
+
+            // flush output stream to ensure response is sent, then close socket
             socket.getOutputStream().flush();
-            socket.close(); // also closes streams
+            socket.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private String buildFilesResponse(Path path) {
+    private String buildGETFilesResponse(Path path) {
         try {
             // read the content as a string
             String content = Files.readString(path);
             // build and return the response
-            return buildGoodResponseWithBody(content, OCTET_STREAM_CONTENT_TYPE);
+            return buildGoodResponseWithBody(content, OCTET_STREAM_CONTENT_TYPE, GOOD_RESPONSE);
         } catch (Exception e) {
             System.out.println("Error trying to read from path: " + path);
             return buildEmptyBody(BAD_RESPONSE);
+        }
+    }
+
+    private Boolean saveFile(String filename, String body) {
+        try {
+            System.out.println("inside saveFile method: " + filename);
+            Path file = Paths.get(filename);
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, body, StandardCharsets.UTF_8);
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error trying to save file to path: " + filename + " with body: " + body);
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -143,6 +174,10 @@ public class Server implements Runnable {
         return url.split("/");
     }
 
+    private String getHttpMethodType(String s) {
+        return s.split(" ")[0];
+    }
+
     private void getHeaders(BufferedReader reader, Map<String, String> headerMap) throws IOException {
         //todo wrap line with optional?
         String line;
@@ -153,20 +188,35 @@ public class Server implements Runnable {
                 String[] splitLine = line.split(":");
                 headerMap.put(splitLine[0], splitLine[1].strip());
             }
+            System.out.println("Current line in headers method: " + line);
         }
         System.out.println("headers: " + headerMap.toString());
     }
 
+    private String getBody(BufferedReader reader, Map<String, String> headerMap) throws IOException {
+        int length = Integer.parseInt(headerMap.getOrDefault("content-length", "0"));
+        if (length == 0) return "";
 
-    private String buildGoodResponseWithBody(String body, String contentType) {
+        char[] buf = new char[length];
+        int read = 0;
+        while (read < length) {
+            int r = reader.read(buf, read, length - read);
+            if (r == -1) throw new IOException("Client closed connection prematurely");
+            read += r;
+        }
+        return new String(buf);
+    }
+
+
+    private String buildGoodResponseWithBody(String body, String contentType, String httpMessage) {
         System.out.println("buildGoodResponseWithBody(String body): " + body);
-        return HTTP_TYPE + " " + GOOD_RESPONSE + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
+        return HTTP_TYPE + " " + httpMessage + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
     }
 
     /*
     Generate a response without headers or a body.
     */
     private String buildEmptyBody(String response) {
-        return HTTP_TYPE + " " + response + "\r\n\r\n";
+        return HTTP_TYPE + " " + response + "\r\nContent-Length: 0\r\n\r\n";
     }
 }
