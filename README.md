@@ -54,7 +54,7 @@ curl -v http://localhost:4221/user-agent \
 
 curl -v http://localhost:4221/echo/pear
 
-# Unknown path → 200 with empty body
+# Unknown path → 404 Not Found
 curl -v http://localhost:4221/raspberry
 
 # Root path (blank body, 200)
