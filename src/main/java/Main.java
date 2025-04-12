@@ -1,52 +1,56 @@
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
 
-  private static final int PORT = 4221;
+    private static final int  PORT             = 4221;
+    private static final int  THREAD_POOL_SIZE = 10;
+    private static final Logger LOG            = Logger.getLogger(Main.class.getName());
 
-  private static final int THREAD_POOL_SIZE = 10;
+    private static String filesDir = "";
 
-  private static String filesDir = "";
+    public static void main(String[] args) {
+        configureLogging();
+        LOG.info("Server starting…");
 
-  public static void main(String[] args) {
-      System.out.println("Program starting...");
+        // Parse CLI args
+        for (int i = 0; i < args.length; i++) {
+            if ("--directory".equals(args[i]) && i + 1 < args.length) {
+                filesDir = args[i + 1];
+                LOG.config(() -> "Files directory set to: " + filesDir);
+                i++; // skip value
+            } else {
+                int finalI = i;
+                LOG.config(() -> "Unknown arg[" + finalI + "]: " + args[finalI]);
+            }
+        }
 
-      // log any command line arguments
-      if (args.length > 0) {
-          System.out.println("Command line arguments:");
-          for (int i = 0; i < args.length; i++) {
-              System.out.println(args[i]);
-              if ("--directory".equals(args[i])) {
-                  System.out.println("files directory for files endpoint is present: " + args[i+1]);
-                  filesDir = args[i+1];
-              }
-          }
-      }
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            serverSocket.setReuseAddress(true);
+            LOG.info(() -> "Listening on port " + PORT);
 
-      ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+            while (true) {
+                Socket client = serverSocket.accept();
+                LOG.fine(() -> "Accepted connection from " + client.getRemoteSocketAddress());
+                executor.execute(new Server(client, filesDir));
+            }
 
-     try {
-       ServerSocket serverSocket = new ServerSocket(PORT);
+        } catch (IOException e) {
+            LOG.log(Level.SEVERE, "Fatal I/O error", e);
+        }
+    }
 
-       // Since the tester restarts the program quite often, setting SO_REUSEADDR
-       // ensures that the tests don't run into 'Address already in use' errors
-       serverSocket.setReuseAddress(true);
-
-       while (true) {
-           Socket client = serverSocket.accept(); // Wait for connection from client.
-           System.out.println("Accepted new connection");
-           executor.execute(new Server(client, filesDir));
-       }
-
-
-     } catch (IOException e) {
-       System.out.println("IOException: " + e.getMessage());
-     }
-  }
+    private static void configureLogging() {
+        // Keep the default console handler but bump the default level
+        Logger root = Logger.getLogger("");
+        root.setLevel(Level.FINE);                 // show INFO, CONFIG, FINE…
+        root.getHandlers()[0].setLevel(Level.FINE);
+    }
 }
