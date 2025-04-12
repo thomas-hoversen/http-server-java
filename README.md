@@ -1,15 +1,15 @@
-# Java HTTP Server
+# Java HTTP Server
 
 A minimal multithreaded HTTP/1.1 server written entirely from scratch in Java.  
 Implemented as part of a **Codecrafters** challenge, meaning every feature was built by hand with only milestone hints for structure.
 
 The server supports:
 
-* `GET /` – root (200 OK, empty body)
+* `GET /` – root (200 OK, empty body)
 * `GET /echo/<msg>` – echoes `<msg>`
 * `GET /user-agent` – echoes the request’s **User‑Agent** header
 * `GET /files/<name>` – returns a file from the supplied directory
-* `POST /files/<name>` – saves the request body to `<name>` and replies **201 Created**
+* `POST /files/<name>` – saves the request body to `<name>` and replies **201 Created**
 
 ---
 
@@ -17,7 +17,7 @@ The server supports:
 
 ### Prerequisites
 
-* **JDK 11+**
+* **JDK11+**
 * **Maven** (`mvn -v` should work)
 * **bash / sh**
 
@@ -64,7 +64,7 @@ curl -v http://localhost:4221/
 ## Resources consulted to implement the code
 ## Resources consulted
 
-* **RFC 7230 – HTTP/1.1 Message Syntax and Routing**  
+* **RFC 7230 – HTTP/1.1 Message Syntax and Routing**  
   <https://datatracker.ietf.org/doc/html/rfc7230#page-5>
 
 * **Java concurrency & thread pools**  
