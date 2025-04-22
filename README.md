@@ -8,8 +8,8 @@ The server supports:
 * `GET /` – root (200 OK, empty body)
 * `GET /echo/<msg>` – echoes `<msg>`
 * `GET /user-agent` – echoes the request’s **User‑Agent** header
-* `GET /files/<name>` – returns a file from the supplied directory
-* `POST /files/<name>` – saves the request body to `<name>` and replies **201 Created**
+* `GET /files/<name>` – returns the contents of the server file `<name>` from the supplied directory, or replies **404 Not Found**
+* `POST /files/<name>` – saves the request body to a .txt file called `<name>` and replies **201 Created**
 
 ---
 
@@ -61,7 +61,6 @@ curl -v http://localhost:4221/raspberry
 curl -v http://localhost:4221/
 ```
 
-## Resources consulted to implement the code
 ## Resources consulted
 
 * **RFC 7230 – HTTP/1.1 Message Syntax and Routing**  
