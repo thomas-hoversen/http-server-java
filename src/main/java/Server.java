@@ -28,48 +28,55 @@ public class Server implements Runnable {
   private static final List<String> ENDPOINTS =
       Arrays.asList("index.html", "echo", "user-agent", "files");
 
-  private final Socket socket;
-  private final String filesDir;
+  private final Socket SOCKET;
+  private final String FILES_DIR;
 
   public Server(Socket socket, String filesDir) {
-    this.socket = socket;
-    this.filesDir = filesDir;
+    this.SOCKET = socket;
+    this.FILES_DIR = filesDir;
   }
 
   @Override
   public void run() {
     try (BufferedReader reader =
-        new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+        new BufferedReader(new InputStreamReader(SOCKET.getInputStream()))) {
 
       /* ---------- Request line ---------- */
+      /*
+      Typical request line:
+        - GET /user-agent HTTP/1.1
+       */
       String requestLine = reader.readLine();
-      LOG.fine(() -> "Request line: " + requestLine);
+      LOG.info(() -> "Request line: " + requestLine);
 
       if (requestLine == null || requestLine.isEmpty()) {
-        LOG.fine("Empty request line, closing connection.");
+        LOG.info(() -> "Empty request line, closing connection.");
         return;
       }
 
       /* ---------- Headers ---------- */
       Map<String, String> headers = readHeaders(reader);
-      LOG.finer(() -> "Headers: " + headers);
+      LOG.info(() -> "Headers: " + headers);
 
+      // ex: [] or [files, raspberry_raspberry_banana_raspberry] or [user-agent] or [echo, pear]
       String[] urlParts = getUrlParts(requestLine);
+      // ex: GET or POST
       String method = getMethod(requestLine);
 
       if (!isValidPath(urlParts)) {
-        LOG.fine(() -> "Invalid URL: " + Arrays.toString(urlParts));
+        LOG.info(() -> "Invalid URL: " + Arrays.toString(urlParts));
         write(buildEmptyBody(NOT_FOUND));
         return;
       }
 
       /* ---------- Routing ---------- */
-      if (urlParts.length < 2) {
+      if (urlParts.length == 0) {
+        LOG.info(() -> "urlParts.length == 0");
         write(buildEmptyBody(OK_RESPONSE));
         return;
       }
 
-      String endpoint = urlParts[1];
+      String endpoint = urlParts[0];
       switch (endpoint) {
         case "echo" -> handleEcho(urlParts);
         case "user-agent" -> handleUserAgent(headers);
@@ -78,11 +85,11 @@ public class Server implements Runnable {
       }
 
     } catch (IOException e) {
-      LOG.log(Level.SEVERE, "I/O error while handling client", e);
+      LOG.severe(() -> "I/O error while handling client" + e);
     } finally {
       try {
-        socket.getOutputStream().flush();
-        socket.close();
+        SOCKET.getOutputStream().flush();
+        SOCKET.close();
       } catch (IOException ignored) {
       }
     }
@@ -91,18 +98,19 @@ public class Server implements Runnable {
   /* ---------- Handlers ---------- */
 
   private void handleEcho(String[] urlParts) throws IOException {
-    if (urlParts.length < 3) {
+    //LOG.info(() -> "handleEcho urlParts: " + Arrays.toString(urlParts));
+    if (urlParts.length < 2) {
       write(buildEmptyBody(NOT_FOUND));
       return;
     }
-    String msg = urlParts[2];
-    LOG.fine(() -> "Echoing: " + msg);
+    String msg = urlParts[1];
+    LOG.info(() -> "Echoing: " + msg);
     write(buildResponse(msg, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE));
   }
 
   private void handleUserAgent(Map<String, String> headers) throws IOException {
     String ua = headers.getOrDefault("user-agent", "");
-    LOG.fine(() -> "User-Agent echoed: " + ua);
+    LOG.info(() -> "User-Agent echoed: " + ua);
     write(buildResponse(ua, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE));
   }
 
@@ -111,18 +119,20 @@ public class Server implements Runnable {
       BufferedReader reader,
       Map<String, String> headers) throws IOException {
 
-    if (urlParts.length < 3) {
+    if (urlParts.length < 2) { // no filename, expecting something like [files, filename]
       write(buildEmptyBody(NOT_FOUND));
       return;
     }
-    String filename = urlParts[2];
-    String path = filesDir + filename;
-    LOG.fine(() -> method + " /files/" + filename);
+    String filename = urlParts[1];
+    String path = FILES_DIR + filename;
+    LOG.info(() -> method + " /files/" + filename);
 
     if ("GET".equals(method)) {
+      //LOG.info(() -> "GET");
       write(buildGetFileResponse(Path.of(path)));
     } else { // POST
       String body = readBody(reader, headers);
+      //LOG.info(() -> "the body: " + body);
       boolean ok = saveFile(path, body);
       write(buildEmptyBody(ok ? CREATED_RESPONSE : NOT_FOUND));
     }
@@ -162,7 +172,7 @@ public class Server implements Runnable {
       Path p = Paths.get(path);
       Files.createDirectories(p.getParent());
       Files.writeString(p, body, StandardCharsets.UTF_8);
-      LOG.fine(() -> "Saved file " + p);
+      LOG.info(() -> "Saved file " + p);
       return true;
     } catch (IOException e) {
       LOG.log(Level.WARNING, "Failed to save file " + path, e);
@@ -175,7 +185,7 @@ public class Server implements Runnable {
       String content = Files.readString(path);
       return buildResponse(content, OCTET_STREAM_CONTENT_TYPE, OK_RESPONSE);
     } catch (IOException e) {
-      LOG.fine(() -> "File not found: " + path);
+      LOG.info(() -> "File not found: " + path);
       return buildEmptyBody(NOT_FOUND);
     }
   }
@@ -192,29 +202,40 @@ public class Server implements Runnable {
   }
 
   private void write(String response) throws IOException {
-    socket.getOutputStream().write(response.getBytes());
+    SOCKET.getOutputStream().write(response.getBytes());
   }
 
   private String[] getUrlParts(String requestLine) {
-    return requestLine.split(" ")[1].split("/");
+    //LOG.info(() -> "getUrlParts: " + requestLine);
+    // GET /echo/pear HTTP/1.1 --> [,"echo","pear"] --> ["echo","pear"]
+    return Arrays.stream(requestLine.split(" ")[1].split("/"))
+        .filter(s -> !s.isEmpty())
+        .toArray(String[]::new);
   }
 
   private String getMethod(String requestLine) {
+    //LOG.info(() -> "getMethod: " + requestLine);
     return requestLine.split(" ")[0];
   }
 
   private boolean isValidPath(String[] parts) {
-      if (parts.length < 2) {
-          return true;
-      }
-    String ep = parts[1];
+    //LOG.info(() -> "isvalidpath: " + Arrays.toString(parts));
+    // GET /echo/pear HTTP/1.1 --> parts = [echo, pear]
+    // GET / HTTP/1.1 --> parts = []
+    if (parts.length == 0) {
+      //LOG.info(() -> "isValidPath length == 0");
+      return true;
+    }
+
+    String ep = parts[0];
       if (!ENDPOINTS.contains(ep)) {
           return false;
       }
-    if (("files".equals(ep) || "echo".equals(ep)) && parts.length != 3) {
-      LOG.fine("Missing filename or echo text");
+    if (("files".equals(ep) || "echo".equals(ep)) && parts.length != 2) {
+      LOG.info("Missing filename for files endpoint or echo text for echo endpoint");
       return false;
     }
+    //LOG.info(() -> "valid path");
     return true;
   }
 }
