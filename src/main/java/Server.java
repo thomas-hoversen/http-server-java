@@ -55,9 +55,8 @@ public class Server implements Runnable {
         LOG.info(() -> "Request line: " + requestLine);
 
         if (requestLine == null || requestLine.isEmpty()) {
-          LOG.info(() -> "Empty request line, closing connection.");
-          SOCKET.close(); // needed?
-          return;
+          LOG.info(() -> "Empty request line, keeping connection alive, looping until server shuts down.");
+          continue;
         }
 
         /* ---------- Headers ---------- */
@@ -79,7 +78,6 @@ public class Server implements Runnable {
         if (urlParts.length == 0) {
           LOG.info(() -> "urlParts.length == 0");
           write(buildEmptyBody(OK_RESPONSE));
-          //return;
         }
 
         String endpoint = urlParts[0];
