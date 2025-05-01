@@ -20,6 +20,7 @@ public class Server implements Runnable {
   private static final String HTTP_TYPE = "HTTP/1.1";
   private static final String PLAINTEXT_CONTENT_TYPE = "text/plain";
   private static final String OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
+  private static final String GZIP_ENCODING = "gzip";
 
   private static final String OK_RESPONSE = "200 OK";
   private static final String CREATED_RESPONSE = "201 Created";
@@ -78,7 +79,7 @@ public class Server implements Runnable {
 
       String endpoint = urlParts[0];
       switch (endpoint) {
-        case "echo" -> handleEcho(urlParts);
+        case "echo" -> handleEcho(urlParts, headers);
         case "user-agent" -> handleUserAgent(headers);
         case "files" -> handleFiles(urlParts, method, reader, headers);
         default -> write(buildEmptyBody(OK_RESPONSE));
@@ -97,7 +98,7 @@ public class Server implements Runnable {
 
   /* ---------- Handlers ---------- */
 
-  private void handleEcho(String[] urlParts) throws IOException {
+  private void handleEcho(String[] urlParts, Map<String, String> headers) throws IOException {
     //LOG.info(() -> "handleEcho urlParts: " + Arrays.toString(urlParts));
     if (urlParts.length < 2) {
       write(buildEmptyBody(NOT_FOUND));
@@ -105,13 +106,13 @@ public class Server implements Runnable {
     }
     String msg = urlParts[1];
     LOG.info(() -> "Echoing: " + msg);
-    write(buildResponse(msg, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE));
+    write(buildResponse(msg, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE, headers));
   }
 
   private void handleUserAgent(Map<String, String> headers) throws IOException {
     String ua = headers.getOrDefault("user-agent", "");
     LOG.info(() -> "User-Agent echoed: " + ua);
-    write(buildResponse(ua, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE));
+    write(buildResponse(ua, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE, headers));
   }
 
   private void handleFiles(String[] urlParts,
@@ -129,7 +130,7 @@ public class Server implements Runnable {
 
     if ("GET".equals(method)) {
       //LOG.info(() -> "GET");
-      write(buildGetFileResponse(Path.of(path)));
+      write(buildGetFileResponse(Path.of(path), headers));
     } else { // POST
       String body = readBody(reader, headers);
       //LOG.info(() -> "the body: " + body);
@@ -180,21 +181,33 @@ public class Server implements Runnable {
     }
   }
 
-  private String buildGetFileResponse(Path path) {
+  private String buildGetFileResponse(Path path, Map<String, String> headers) {
     try {
       String content = Files.readString(path);
-      return buildResponse(content, OCTET_STREAM_CONTENT_TYPE, OK_RESPONSE);
+      return buildResponse(content, OCTET_STREAM_CONTENT_TYPE, OK_RESPONSE, headers);
     } catch (IOException e) {
       LOG.info(() -> "File not found: " + path);
       return buildEmptyBody(NOT_FOUND);
     }
   }
 
-  private String buildResponse(String body, String contentType, String status) {
-    return HTTP_TYPE + " " + status +
-        "\r\nContent-Type: " + contentType +
-        "\r\nContent-Length: " + body.length() +
-        "\r\n\r\n" + body;
+  private String buildResponse(String body, String contentType, String status, Map<String, String> headers) {
+
+    StringBuilder response = new StringBuilder();
+    response.append(HTTP_TYPE).append(" ").append(status);
+    response.append("\r\nContent-Type: ").append(contentType);
+    response.append("\r\nContent-Length: ").append(body.length());
+
+    if (headers.containsKey("accept-encoding") && headers.get("accept-encoding").equals(GZIP_ENCODING)) {
+      // encode body
+
+      // add header to response
+      response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING); // the only encoding type accepted
+    }
+
+    response.append("\r\n\r\n").append(body);
+
+    return response.toString();
   }
 
   private String buildEmptyBody(String status) {
