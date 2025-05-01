@@ -71,7 +71,6 @@ public class Server implements Runnable {
         if (!isValidPath(urlParts)) {
           LOG.info(() -> "Invalid URL: " + Arrays.toString(urlParts));
           write(buildEmptyBody(NOT_FOUND));
-          return;
         }
 
         /* ---------- Routing ---------- */
@@ -97,7 +96,7 @@ public class Server implements Runnable {
         }
       }
     } catch (Exception e) {
-      LOG.severe(() -> "I/O error while handling client" + e);
+      LOG.severe(() -> "I/O error while handling client " + e);
     }
   }
 
@@ -218,6 +217,12 @@ public class Server implements Runnable {
         LOG.info(() -> "Response encoded to gzip.");
         // add header to response
         response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING);
+      }
+    }
+
+    if (headers.containsKey("connection")) {
+      if (headers.get("connection").equals("close")) {
+        response.append("\r\nConnection: ").append("close");
       }
     }
 
