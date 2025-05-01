@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -148,7 +149,8 @@ public class Server implements Runnable {
       int colon = line.indexOf(':');
       if (colon > 0) {
         map.put(line.substring(0, colon).trim().toLowerCase(),
-            line.substring(colon + 1).trim());
+            // remove whitespace
+            line.substring(colon + 1).replace(" ", ""));
       }
     }
     return map;
@@ -198,11 +200,16 @@ public class Server implements Runnable {
     response.append("\r\nContent-Type: ").append(contentType);
     response.append("\r\nContent-Length: ").append(body.length());
 
-    if (headers.containsKey("accept-encoding") && headers.get("accept-encoding").equals(GZIP_ENCODING)) {
-      // encode body
+    if (headers.containsKey("accept-encoding")) {
 
-      // add header to response
-      response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING); // the only encoding type accepted
+      // ex: Headers: {host=localhost:4221, accept-encoding=encoding-1, encoding-2, gzip}
+      List<String> encodings = new ArrayList<>(List.of(headers.get("accept-encoding").split(",")));
+      if (encodings.contains(GZIP_ENCODING)) {
+        // encode body
+
+        // add header to response
+        response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING); // the only encoding type accepted
+      }
     }
 
     response.append("\r\n\r\n").append(body);
