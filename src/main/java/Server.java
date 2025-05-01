@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.zip.GZIPOutputStream;
 
 public class Server implements Runnable {
 
@@ -86,7 +88,7 @@ public class Server implements Runnable {
         default -> write(buildEmptyBody(OK_RESPONSE));
       }
 
-    } catch (IOException e) {
+    } catch (Exception e) {
       LOG.severe(() -> "I/O error while handling client" + e);
     } finally {
       try {
@@ -99,7 +101,7 @@ public class Server implements Runnable {
 
   /* ---------- Handlers ---------- */
 
-  private void handleEcho(String[] urlParts, Map<String, String> headers) throws IOException {
+  private void handleEcho(String[] urlParts, Map<String, String> headers) throws Exception {
     //LOG.info(() -> "handleEcho urlParts: " + Arrays.toString(urlParts));
     if (urlParts.length < 2) {
       write(buildEmptyBody(NOT_FOUND));
@@ -110,7 +112,7 @@ public class Server implements Runnable {
     write(buildResponse(msg, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE, headers));
   }
 
-  private void handleUserAgent(Map<String, String> headers) throws IOException {
+  private void handleUserAgent(Map<String, String> headers) throws Exception {
     String ua = headers.getOrDefault("user-agent", "");
     LOG.info(() -> "User-Agent echoed: " + ua);
     write(buildResponse(ua, PLAINTEXT_CONTENT_TYPE, OK_RESPONSE, headers));
@@ -183,46 +185,73 @@ public class Server implements Runnable {
     }
   }
 
-  private String buildGetFileResponse(Path path, Map<String, String> headers) {
+  private byte[] buildGetFileResponse(Path path, Map<String, String> headers) {
     try {
       String content = Files.readString(path);
       return buildResponse(content, OCTET_STREAM_CONTENT_TYPE, OK_RESPONSE, headers);
     } catch (IOException e) {
       LOG.info(() -> "File not found: " + path);
       return buildEmptyBody(NOT_FOUND);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 
-  private String buildResponse(String body, String contentType, String status, Map<String, String> headers) {
+  private byte[] buildResponse(String body, String contentType, String status, Map<String, String> headers)
+      throws Exception {
+
+    byte[] newBody = null;
 
     StringBuilder response = new StringBuilder();
     response.append(HTTP_TYPE).append(" ").append(status);
     response.append("\r\nContent-Type: ").append(contentType);
-    response.append("\r\nContent-Length: ").append(body.length());
 
     if (headers.containsKey("accept-encoding")) {
 
       // ex: Headers: {host=localhost:4221, accept-encoding=encoding-1, encoding-2, gzip}
       List<String> encodings = new ArrayList<>(List.of(headers.get("accept-encoding").split(",")));
-      if (encodings.contains(GZIP_ENCODING)) {
+      if (encodings.contains(GZIP_ENCODING)) { // the only encoding type accepted
         // encode body
-
+        newBody = compress(body);
+        LOG.info(() -> "Response encoded to gzip.");
         // add header to response
-        response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING); // the only encoding type accepted
+        response.append("\r\nContent-Encoding: ").append(GZIP_ENCODING);
       }
     }
 
-    response.append("\r\n\r\n").append(body);
+    if (newBody != null) {
+      response.append("\r\nContent-Length: ").append(newBody.length);
+      response.append("\r\n\r\n");
+      byte[] currBody = response.toString().getBytes();
 
-    return response.toString();
+      ByteArrayOutputStream out = new ByteArrayOutputStream(currBody.length + newBody.length);
+      out.write(currBody);
+      out.write(newBody);
+      return out.toByteArray();
+    } else {
+      response.append("\r\nContent-Length: ").append(body.length());
+      response.append("\r\n\r\n").append(body);
+      return response.toString().getBytes();
+    }
   }
 
-  private String buildEmptyBody(String status) {
-    return HTTP_TYPE + " " + status + "\r\nContent-Length: 0\r\n\r\n";
+  private byte[] compress(String str) throws Exception {
+    if (str == null || str.isEmpty()) {
+      return null;
+    }
+    ByteArrayOutputStream obj=new ByteArrayOutputStream();
+    GZIPOutputStream gzip = new GZIPOutputStream(obj);
+    gzip.write(str.getBytes("UTF-8"));
+    gzip.close();
+    return obj.toByteArray();
   }
 
-  private void write(String response) throws IOException {
-    SOCKET.getOutputStream().write(response.getBytes());
+  private byte[] buildEmptyBody(String status) {
+    return (HTTP_TYPE + " " + status + "\r\nContent-Length: 0\r\n\r\n").getBytes();
+  }
+
+  private void write(byte[] response) throws IOException {
+    SOCKET.getOutputStream().write(response);
   }
 
   private String[] getUrlParts(String requestLine) {

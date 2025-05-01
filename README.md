@@ -75,4 +75,6 @@ curl -v http://localhost:4221/
 * **Working with `java.nio.file.Files`**  
   <https://www.marcobehler.com/guides/java-files>
 
+* **To check that the compressed GZIP body is correct, run `echo -n <uncompressed-str> | gzip | hexdump -C`**
+
 * **Codecrafters CLI** – run automated tests locally with `codecrafters test` (this won't work outside Thomas's local machine).
