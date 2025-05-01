@@ -45,57 +45,61 @@ public class Server implements Runnable {
     try (BufferedReader reader =
         new BufferedReader(new InputStreamReader(SOCKET.getInputStream()))) {
 
-      /* ---------- Request line ---------- */
+      while (true) {
+        /* ---------- Request line ---------- */
       /*
       Typical request line:
         - GET /user-agent HTTP/1.1
        */
-      String requestLine = reader.readLine();
-      LOG.info(() -> "Request line: " + requestLine);
+        String requestLine = reader.readLine();
+        LOG.info(() -> "Request line: " + requestLine);
 
-      if (requestLine == null || requestLine.isEmpty()) {
-        LOG.info(() -> "Empty request line, closing connection.");
-        return;
+        if (requestLine == null || requestLine.isEmpty()) {
+          LOG.info(() -> "Empty request line, closing connection.");
+          SOCKET.close(); // needed?
+          return;
+        }
+
+        /* ---------- Headers ---------- */
+        Map<String, String> headers = readHeaders(reader);
+        LOG.info(() -> "Headers: " + headers);
+
+        // ex: [] or [files, raspberry_raspberry_banana_raspberry] or [user-agent] or [echo, pear]
+        String[] urlParts = getUrlParts(requestLine);
+        // ex: GET or POST
+        String method = getMethod(requestLine);
+
+        if (!isValidPath(urlParts)) {
+          LOG.info(() -> "Invalid URL: " + Arrays.toString(urlParts));
+          write(buildEmptyBody(NOT_FOUND));
+          return;
+        }
+
+        /* ---------- Routing ---------- */
+        if (urlParts.length == 0) {
+          LOG.info(() -> "urlParts.length == 0");
+          write(buildEmptyBody(OK_RESPONSE));
+          //return;
+        }
+
+        String endpoint = urlParts[0];
+        switch (endpoint) {
+          case "echo" -> handleEcho(urlParts, headers);
+          case "user-agent" -> handleUserAgent(headers);
+          case "files" -> handleFiles(urlParts, method, reader, headers);
+          default -> write(buildEmptyBody(OK_RESPONSE));
+        }
+
+        SOCKET.getOutputStream().flush();
+
+        if (headers.containsKey("connection")) {
+          if (headers.get("connection").equals("close")) {
+            SOCKET.close();
+          }
+        }
       }
-
-      /* ---------- Headers ---------- */
-      Map<String, String> headers = readHeaders(reader);
-      LOG.info(() -> "Headers: " + headers);
-
-      // ex: [] or [files, raspberry_raspberry_banana_raspberry] or [user-agent] or [echo, pear]
-      String[] urlParts = getUrlParts(requestLine);
-      // ex: GET or POST
-      String method = getMethod(requestLine);
-
-      if (!isValidPath(urlParts)) {
-        LOG.info(() -> "Invalid URL: " + Arrays.toString(urlParts));
-        write(buildEmptyBody(NOT_FOUND));
-        return;
-      }
-
-      /* ---------- Routing ---------- */
-      if (urlParts.length == 0) {
-        LOG.info(() -> "urlParts.length == 0");
-        write(buildEmptyBody(OK_RESPONSE));
-        return;
-      }
-
-      String endpoint = urlParts[0];
-      switch (endpoint) {
-        case "echo" -> handleEcho(urlParts, headers);
-        case "user-agent" -> handleUserAgent(headers);
-        case "files" -> handleFiles(urlParts, method, reader, headers);
-        default -> write(buildEmptyBody(OK_RESPONSE));
-      }
-
     } catch (Exception e) {
       LOG.severe(() -> "I/O error while handling client" + e);
-    } finally {
-      try {
-        SOCKET.getOutputStream().flush();
-        SOCKET.close();
-      } catch (IOException ignored) {
-      }
     }
   }
 
