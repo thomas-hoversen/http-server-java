@@ -63,6 +63,7 @@ public class Main {
         even if the Server handler throws.  */
         executor.execute(() -> {
           try (Socket c = client) { // auto‑close after run()
+            c.setSoTimeout(10_000); // leave socket connection alive
             new Server(c, FILES_DIR).run();
           } catch (IOException e) {
             LOG.log(Level.WARNING, "Error handling client", e);

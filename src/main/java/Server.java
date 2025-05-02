@@ -3,6 +3,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,15 +48,14 @@ public class Server implements Runnable {
 
       while (true) {
         /* ---------- Request line ---------- */
-      /*
-      Typical request line:
-        - GET /user-agent HTTP/1.1
-       */
+        /*
+          Typical request line:
+            - GET /user-agent HTTP/1.1
+         */
         String requestLine = reader.readLine();
         LOG.info(() -> "Request line: " + requestLine);
 
         if (requestLine == null || requestLine.isEmpty()) {
-          LOG.info(() -> "Empty request line, keeping connection alive, looping until server shuts down.");
           continue;
         }
 
@@ -70,13 +70,15 @@ public class Server implements Runnable {
 
         if (!isValidPath(urlParts)) {
           LOG.info(() -> "Invalid URL: " + Arrays.toString(urlParts));
-          write(buildEmptyBody(NOT_FOUND));
+          write(buildEmptyBody(NOT_FOUND, headers));
+          continue;
         }
 
         /* ---------- Routing ---------- */
         if (urlParts.length == 0) {
           LOG.info(() -> "urlParts.length == 0");
-          write(buildEmptyBody(OK_RESPONSE));
+          write(buildEmptyBody(OK_RESPONSE, headers));
+          continue;
         }
 
         String endpoint = urlParts[0];
@@ -84,7 +86,7 @@ public class Server implements Runnable {
           case "echo" -> handleEcho(urlParts, headers);
           case "user-agent" -> handleUserAgent(headers);
           case "files" -> handleFiles(urlParts, method, reader, headers);
-          default -> write(buildEmptyBody(OK_RESPONSE));
+          default -> write(buildEmptyBody(OK_RESPONSE, headers));
         }
 
         SOCKET.getOutputStream().flush();
@@ -95,6 +97,8 @@ public class Server implements Runnable {
           }
         }
       }
+    } catch (SocketTimeoutException e) {
+      LOG.info("Idle timeout reached, closing socket");
     } catch (Exception e) {
       LOG.severe(() -> "I/O error while handling client " + e);
     }
@@ -105,7 +109,7 @@ public class Server implements Runnable {
   private void handleEcho(String[] urlParts, Map<String, String> headers) throws Exception {
     //LOG.info(() -> "handleEcho urlParts: " + Arrays.toString(urlParts));
     if (urlParts.length < 2) {
-      write(buildEmptyBody(NOT_FOUND));
+      write(buildEmptyBody(NOT_FOUND, headers));
       return;
     }
     String msg = urlParts[1];
@@ -125,7 +129,7 @@ public class Server implements Runnable {
       Map<String, String> headers) throws IOException {
 
     if (urlParts.length < 2) { // no filename, expecting something like [files, filename]
-      write(buildEmptyBody(NOT_FOUND));
+      write(buildEmptyBody(NOT_FOUND, headers));
       return;
     }
     String filename = urlParts[1];
@@ -139,7 +143,7 @@ public class Server implements Runnable {
       String body = readBody(reader, headers);
       //LOG.info(() -> "the body: " + body);
       boolean ok = saveFile(path, body);
-      write(buildEmptyBody(ok ? CREATED_RESPONSE : NOT_FOUND));
+      write(buildEmptyBody(ok ? CREATED_RESPONSE : NOT_FOUND, headers));
     }
   }
 
@@ -192,7 +196,7 @@ public class Server implements Runnable {
       return buildResponse(content, OCTET_STREAM_CONTENT_TYPE, OK_RESPONSE, headers);
     } catch (IOException e) {
       LOG.info(() -> "File not found: " + path);
-      return buildEmptyBody(NOT_FOUND);
+      return buildEmptyBody(NOT_FOUND, headers);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -253,8 +257,17 @@ public class Server implements Runnable {
     return obj.toByteArray();
   }
 
-  private byte[] buildEmptyBody(String status) {
-    return (HTTP_TYPE + " " + status + "\r\nContent-Length: 0\r\n\r\n").getBytes();
+  private byte[] buildEmptyBody(String status, Map<String, String> headers) {
+    StringBuilder response = new StringBuilder();
+    response.append(HTTP_TYPE).append(" ").append(status).append("\r\nContent-Length: 0");
+    if (headers.containsKey("connection")) {
+      if (headers.get("connection").equals("close")) {
+        response.append("\r\nConnection: ").append("close");
+      }
+    }
+    response.append("\r\n\r\n");
+    System.out.println(response.toString());
+    return response.toString().getBytes();
   }
 
   private void write(byte[] response) throws IOException {
