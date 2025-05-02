@@ -1,7 +1,30 @@
 # Java HTTP Server
 
 A lean, from-scratch HTTP/1.1 server written in Java as part of a **Codecrafters** challenge, 
-meaning every feature was built by hand with only milestone hints for structure.  
+meaning every feature was built by hand with only milestone hints for structure.
+
+At work I would build a Java web service using Spring Boot and WebFlux. These abstract away HTTP 
+protocols, virtual thread management and scaling, etc, out of the box. This simple project is
+an educational experience to implement thin slices of the protocol by hand. It isn't perfect and
+would need structural improvements to memory management and code structure before it would be 
+'production-ready'. The important concepts I took away from this project was managing virtual threads,
+using http headers like accept-encoding, the general HTTP protocol and request/response structure, 
+and using the ServerSocket and Socket classes to expose a port and accept incoming connection requests.
+
+Some future improvements would include more robust handling of request sizes and request parsing;
+separating concerns from the Server file via more Java objects; and introducing a handler interface
+per endpoint to mirror real web-framework patterns.
+
+**AI USE IN THIS PROJECT**
+
+During the project, I tried to avoid using AI to solve each milestone step outlined in the
+CodeCrafters challenge because I felt using AI would detract from the educational value. Once
+the project was complete and passing all of the CodeCrafter tests, I used AI to evaluate the
+project and identify areas of improvement. For example, the AI helped me refactor the
+One-thread-per-socket model I was using to replace it with Virtual threads (Project Loom) and a
+Semaphore gate for better scalability (not that this project needs it).
+
+
 Key features:
 
 * **Virtual threads** (Project Loom) for inexpensive concurrency
