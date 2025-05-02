@@ -1,19 +1,18 @@
 # Java HTTP Server
 
-A minimal multithreaded HTTP/1.1 server written entirely from scratch in Java.  
-Implemented as part of a **Codecrafters** challenge, meaning every feature was built by hand with only milestone hints for structure.  
-The server supports **persistent connections** and **HTTP response compression (gzip)** where applicable.
+A lean, from-scratch HTTP/1.1 server written in Java as part of a **Codecrafters** challenge, 
+meaning every feature was built by hand with only milestone hints for structure.  
+Key features:
 
-The server supports:
-
-* `GET /` – root (200 OK, empty body)
-* `GET /echo/<msg>` – echoes `<msg>`
-* `GET /user-agent` – echoes the request’s **User‑Agent** header
-* `GET /files/<name>` – returns the contents of the server file `<name>` from the supplied directory, or replies **404 Not Found**
-* `POST /files/<name>` – saves the request body to a .txt file called `<name>` and replies **201 Created**
-* Persistent connections with `Connection: keep-alive` (default per HTTP/1.1)
-* Graceful shutdown of idle clients using socket timeouts
-* Gzip compression if the client sends `Accept-Encoding: gzip`
+* **Virtual threads** (Project Loom) for inexpensive concurrency
+* **Semaphore gate** (100 k permits) to cap simultaneous connections
+* **Keep-alive** by default; 10 s application idle + read timeouts
+* Optional **gzip** response if the client sends `Accept-Encoding: gzip`
+* Tiny routing layer:
+  * `GET /` – empty 200
+  * `GET /echo/<msg>` – returns `<msg>`
+  * `GET /user-agent` – echoes the `User-Agent` header
+  * `GET /files/<name>` / `POST /files/<name>` – simple file download / upload
 
 ---
 
@@ -28,8 +27,8 @@ The server supports:
 ### Start the server
 
 ```bash
-chmod +x your_program.sh          # one‑time
-./your_program.sh --directory /tmp/data/codecrafters.io/http-server-tester/
+chmod +x http_server_start.sh          # one‑time
+./http_server_start.sh --directory /tmp/data/codecrafters.io/http-server-tester/
 ```
 
 ---
@@ -54,7 +53,7 @@ curl -v http://localhost:4221/ \
      -H "Connection: keep-alive"
 
 # Test gzip compression
-curl -v http://localhost:4221/echo/pear \
+curl --compressed -v  http://localhost:4221/echo/pear \
      -H "Accept-Encoding: gzip"
 
 # Echo endpoints

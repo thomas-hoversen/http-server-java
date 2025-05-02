@@ -3,6 +3,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -10,8 +11,9 @@ import java.util.logging.Logger;
 public class Main {
 
   private static final int PORT = 4221;
-  // scale thread pool size to machine
-  private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
+  // Max *running or parked* virtual threads allowed at once
+  static final int MAX_CONN = 100_000;
+  static Semaphore slots = new Semaphore(MAX_CONN);
   private static final Logger LOG = Logger.getLogger(Main.class.getName());
 
   private static String FILES_DIR = "";
@@ -32,7 +34,7 @@ public class Main {
       }
     }
 
-    ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     /*  Add a shutdown‑hook so Ctrl‑C (SIGINT) or normal JVM shutdown
     drains the pool instead of leaving threads & sockets hanging.   */
@@ -57,16 +59,22 @@ public class Main {
 
       while (true) {
         Socket client = serverSocket.accept();
+        if (!slots.tryAcquire()) {
+          client.close();              // decrement available permits
+          continue;
+        }
         LOG.fine(() -> "Accepted connection from " + client.getRemoteSocketAddress());
 
         /*  Wrap each client socket in try‑with‑resources so it ALWAYS closes,
         even if the Server handler throws.  */
-        executor.execute(() -> {
+        executor.submit(() -> {
           try (Socket c = client) { // auto‑close after run()
-            c.setSoTimeout(10_000); // leave socket connection alive
+            c.setSoTimeout(10_000);
             new Server(c, FILES_DIR).run();
           } catch (IOException e) {
             LOG.log(Level.WARNING, "Error handling client", e);
+          } finally {
+            slots.release();                  // increment available permits
           }
         });
 

@@ -17,6 +17,34 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.GZIPOutputStream;
 
+/*
+
+todo:
+1.
+httpserver/
+  Main.java
+  server/ Server.java
+  http/  HttpRequest.java  HttpResponse.java  HttpStatus.java
+  util/  GzipUtil.java  PathUtils.java
+
+2.
+Move magic strings → enums/constants
+enum HttpMethod { GET, POST }, enum HttpStatus { OK(200, "OK"), NOT_FOUND(404,"Not Found"), … }
+
+3.
+Protect against path traversal.
+Path base = Paths.get(filesDir).toRealPath();
+Path target = base.resolve(filename).normalize();
+if (!target.startsWith(base)) { response 403; }
+
+4.
+Extract HttpRequest (method, path, headers, body) and HttpResponse (status, headers, body, toBytes()).
+
+5.
+Introduce Handler interface per endpoint (EchoHandler, FileHandler). Server just picks the handler.
+
+
+ */
 public class Server implements Runnable {
 
   private static final Logger LOG = Logger.getLogger(Server.class.getName());
@@ -36,6 +64,9 @@ public class Server implements Runnable {
   private final Socket SOCKET;
   private final String FILES_DIR;
 
+  final long IDLE_TIMEOUT_MS = 10_000;   // close connection after 30 s idle
+  long lastActivity = System.currentTimeMillis();
+
   public Server(Socket socket, String filesDir) {
     this.SOCKET = socket;
     this.FILES_DIR = filesDir;
@@ -47,6 +78,14 @@ public class Server implements Runnable {
         new BufferedReader(new InputStreamReader(SOCKET.getInputStream()))) {
 
       while (true) {
+
+        /* If it is idle too long, bail out */
+        if (System.currentTimeMillis() - lastActivity > IDLE_TIMEOUT_MS) {
+          LOG.info(() -> "Idle > " + IDLE_TIMEOUT_MS +
+              " ms, closing " + SOCKET);
+          break;      // try-with-resources will close socket
+        }
+
         /* ---------- Request line ---------- */
         /*
           Typical request line:
@@ -96,6 +135,8 @@ public class Server implements Runnable {
             SOCKET.close();
           }
         }
+
+        lastActivity = System.currentTimeMillis();
       }
     } catch (SocketTimeoutException e) {
       LOG.info("Idle timeout reached, closing socket");
@@ -266,7 +307,6 @@ public class Server implements Runnable {
       }
     }
     response.append("\r\n\r\n");
-    System.out.println(response.toString());
     return response.toString().getBytes();
   }
 
