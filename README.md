@@ -3,7 +3,7 @@
 A lean, from-scratch HTTP/1.1 server written in Java as part of a **Codecrafters** challenge, 
 meaning every feature was built by hand with only milestone hints for structure.
 
-At work I would build a Java web service using Spring Boot and WebFlux. These abstract away HTTP 
+At work I would build a Java web service using Spring Boot with Spring Web MVC. These abstract away HTTP 
 protocols, virtual thread management and scaling, etc, out of the box. This simple project is
 an educational experience to implement thin slices of the protocol by hand. It isn't perfect and
 would need structural improvements to memory management and code structure before it would be 
